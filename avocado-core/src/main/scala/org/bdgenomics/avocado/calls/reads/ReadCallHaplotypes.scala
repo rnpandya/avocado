@@ -38,6 +38,7 @@ import org.bdgenomics.avocado.stats.AvocadoConfigAndStats
 import org.apache.commons.configuration.SubnodeConfiguration
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
+import scala.annotation.tailrec
 import scala.collection.immutable.{ SortedSet, TreeSet }
 import scala.collection.mutable.HashSet
 import scala.math._
@@ -68,6 +69,9 @@ abstract class ReadCallHaplotypes(
    * @see getReadReference
    */
   def getReference(region: Seq[RichADAMRecord]): String = {
+
+    val ts = System.nanoTime
+
     // TODO(peter, 12/5) currently, get the reference subsequence from the
     // MD tags of the ADAM records. Not entirely correct, because a region may
     // not be completely covered by reads, in which case the MD tags are
@@ -118,22 +122,39 @@ abstract class ReadCallHaplotypes(
         }
       }
     }
+
     reference
   }
 
   /**
-   * Checks to see if region is active.
+   * Checks to see if region is active using an Illumina specific test. We mark
+   * the region as active if the region shows indel evidence, or if the number
+   * of mismatching bases in the region is higher than expected.
    *
    * @param region Sequence of reads over which to test.
    * @param ref Reference sequence over which to test.
    * @return True if region is active.
    */
   def isRegionActive(region: Seq[RichADAMRecord], ref: String): Boolean = {
-    // TODO(peter, 12/6) a very naive active region criterion. Upgrade asap!
-    val activeLikelihoodThresh = -2.0
-    var refHaplotype = new Haplotype(ref, region)
-    val readsLikelihood = refHaplotype.readsLikelihood
-    readsLikelihood < activeLikelihoodThresh
+    @tailrec def collectStats(hasIndel: Boolean,
+                              mismatches: Int,
+                              bases: Int,
+                              reg: Iterator[RichADAMRecord]): (Boolean, Int, Int) = {
+      if (hasIndel || !reg.hasNext) {
+        (hasIndel, mismatches, bases)
+      } else {
+        val read = reg.next
+        collectStats(read.record.getCigar.toString.contains('I') ||
+          read.record.getCigar.toString.contains('D'),
+          read.record.getMismatchingPositions.toString.count(_.isLetter) + mismatches,
+          read.record.getSequence.length + bases,
+          reg)
+      }
+    }
+
+    val (hasIndel, mismatches, bases) = collectStats(false, 0, 0, region.toIterator)
+
+    hasIndel || (mismatches.toDouble > bases.toDouble / 45.0)
   }
 
   /**
@@ -313,6 +334,8 @@ abstract class ReadCallHaplotypes(
                       referenceRegion: Option[ReferenceRegion] = None,
                       maxHaplotypes: Int = 16): List[ADAMVariantContext] = {
 
+    val ts = System.nanoTime
+
     // info for logging
     val (start, end) = referenceRegion.fold((region.map(_.getStart).min,
       region.flatMap(_.end).max))(rr => (rr.start, rr.end))
@@ -354,7 +377,9 @@ abstract class ReadCallHaplotypes(
     }
 
     // Pick the top X-1 haplotypes and the reference haplotype.
-    val bestHaplotypes = refHaplotype :: orderedHaplotypes.take(maxHaplotypes - 1).toList
+    val bestHaplotypes = refHaplotype :: orderedHaplotypes.filter(_.hasVariants)
+      .take(maxHaplotypes - 1)
+      .toList
 
     // Score the haplotypes pairwise inclusively.
     val orderedHaplotypePairBuilder = TreeSet.newBuilder[HaplotypePair](HaplotypePairOrdering.reverse)
@@ -383,7 +408,7 @@ abstract class ReadCallHaplotypes(
     val variantPhred = PhredUtils.successProbabilityToPhred(variantErrorProb)
 
     // TODO(peter, 12/8) Call variants, _without_ incorporating phasing for now.
-    if (calledHaplotypePair.isDefined) {
+    val calls = if (calledHaplotypePair.isDefined) {
       var variants = List[ADAMVariantContext]()
       val sortedRegion = region.sortBy(_.getStart)
       val firstRead = sortedRegion(0)
@@ -459,6 +484,8 @@ abstract class ReadCallHaplotypes(
         start + " to " + end + ".")
       List()
     }
+
+    calls
   }
 
   /**
