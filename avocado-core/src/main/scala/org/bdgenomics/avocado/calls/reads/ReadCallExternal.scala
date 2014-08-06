@@ -82,15 +82,14 @@ private[reads] class ReadCallExternal(contigLengths: Map[String, Long],
       writer.setHeader(header)
 
       var count = 0
-      println("Starting to write records.")
+      log.info("Starting to write records.")
 
       // cram data into standard in and flush
       records.foreach(r => {
-        if (count % 1000 == 0) {
-          stream.flush
-          println("flush succeeded")
+        if (count % 100000 == 0) {
+          stream.flush()
+          log.info("Have written " + count + " reads.")
         }
-        println("Have written " + count + " reads.")
 
         count += 1
 
@@ -99,6 +98,8 @@ private[reads] class ReadCallExternal(contigLengths: Map[String, Long],
 
       // finish and close
       writer.close()
+      stream.flush()
+      log.info("Wrote a total of " + count + " reads")
     }
   }
 
@@ -110,7 +111,7 @@ private[reads] class ReadCallExternal(contigLengths: Map[String, Long],
     Sorting.stableSort(reads, (kv1: (ReferencePosition, SAMRecordWritable), kv2: (ReferencePosition, SAMRecordWritable)) => {
       kv1._1.compare(kv2._1) == -1
     })
-    println("have " + reads.length + " reads")
+    log.info("have " + reads.length + " reads")
 
     // we can get empty partitions if we:
     // - have contigs that do not have reads mapped to them
@@ -124,8 +125,8 @@ private[reads] class ReadCallExternal(contigLengths: Map[String, Long],
 
       // build snap process
       val cmdUpdated = cmd.replaceAll("::VCFOUT::",
-        tempDir.toAbsolutePath.toString + "/calls.vcf")
-      println("running: " + cmdUpdated)
+        tempDir.toAbsolutePath.resolve("calls.vcf").toString.replaceAll("\\\\", "\\\\\\\\"))
+      log.info("running on host " + java.net.InetAddress.getLocalHost().getHostName() + ": " + cmdUpdated)
       val pb = new ProcessBuilder(cmdUpdated.split(" ").toList)
 
       // redirect error and get i/o streams
@@ -142,12 +143,16 @@ private[reads] class ReadCallExternal(contigLengths: Map[String, Long],
       pool.submit(new ExternalWriter(reads, header.header, inp))
 
       // wait for process to finish
-      process.waitFor()
+      val result = process.waitFor()
+      if (result != 0) {
+        log.error("Process " + cmdUpdated + " exited with " + result)
+        throw new Exception("Process " + cmdUpdated + " exited with " + result)
+      }
 
       // shut down pool
       pool.shutdown()
 
-      println("process completed")
+      log.info("process completed")
 
       // get vcf data - no index
       val vcfFile = new VCFFileReader(new File(tempDir.toAbsolutePath.toString + "/calls.vcf"), false)
@@ -165,7 +170,12 @@ private[reads] class ReadCallExternal(contigLengths: Map[String, Long],
       }
 
       // need to close iterator - another code smell, but is required by samtools
-      iterator.close()
+      try {
+        iterator.close()
+      } catch {
+        case ex: Exception =>
+          log.warn("VCFReader exited with error " + ex)
+      }
 
       // convert back to iterator and return
       records.toIterator
@@ -173,6 +183,8 @@ private[reads] class ReadCallExternal(contigLengths: Map[String, Long],
   }
 
   def call(rdd: RDD[ADAMRecord]): RDD[ADAMVariantContext] = {
+
+    log.info("variant input DebugString:\n" + rdd.toDebugString)
 
     // get initial partition count
     val partitions = rdd.partitions.length
@@ -183,22 +195,23 @@ private[reads] class ReadCallExternal(contigLengths: Map[String, Long],
     // broadcast header
     val hdrBcast = reads.context.broadcast(SAMFileHeaderWritable(header))
 
-    println("have " + reads.count + " reads")
+    log.info("have " + -1 /*reads.count*/ + " reads")
 
     // key reads by position and repartition
     val readsByPosition = reads.keyBy(r => ReferencePosition(r.get.getReferenceName.toString, r.get.getAlignmentStart))
       .partitionBy(new GenomicRegionPartitioner(numPart, contigLengths))
 
-    println("have " + readsByPosition.count + " reads after partitioning")
-    readsByPosition.foreachPartition(i => println("have " + i.length + " reads per partition"))
+    log.info("have " + -1 /*readsByPosition.count*/ + " reads after partitioning")
+    //readsByPosition.foreachPartition(i => log.info("have " + i.length + " reads per partition"))
 
     // map partitions to external program
     val variants = readsByPosition.mapPartitions(r => callVariants(r, hdrBcast.value))
 
     // convert variants to adam format, coalesce, and return
     val converter = new VariantContextConverter()
-    variants.flatMap(vc => converter.convert(vc.get))
-      .coalesce(partitions, true)
+    val result = variants.flatMap(vc => converter.convert(vc.get)).coalesce(partitions, true)
+    log.info("variant output DebugString:\n" + result.toDebugString)
+    result
   }
 
   def isCallable(): Boolean = true
