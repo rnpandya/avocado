@@ -66,6 +66,7 @@ private[input] object SnapInputStage extends InputStage with Logging {
 
     val numMachines = config.getInt("numMachines")
     val coresPerMachine = config.getInt("coresPerMachine")
+    val debug = config.getBoolean("debug", false)
 
     /* Implement the following flags for SNAP:
      * 
@@ -184,9 +185,13 @@ private[input] object SnapInputStage extends InputStage with Logging {
       classOf[Void],
       classOf[Text])
 
-    log.info("SNAP input DebugString:\n" + fastqIn.toDebugString)
+    if (debug) {
+      log.info("SNAP input DebugString:\n" + fastqIn.toDebugString)
+    }
     val fastqAsText: RDD[Text] = fastqIn.coalesce(numMachines, false).map(_._2)
-    log.info("SNAP coalesced input DebugString:\n" + fastqAsText.toDebugString)
+    if (debug) {
+      log.info("SNAP coalesced input DebugString:\n" + fastqAsText.toDebugString)
+    }
 
     // necessary data for conversion
     val seqDictBcast = fastqAsText.context.broadcast(reference.adamGetSequenceDictionary)
@@ -195,7 +200,9 @@ private[input] object SnapInputStage extends InputStage with Logging {
     val reads = fastqAsText.mapPartitionsWithIndex(runner.mapReads(_, _, seqDictBcast.value))
 
     val result = reads.coalesce(numMachines * coresPerMachine * 4, true).persist(StorageLevel.DISK_ONLY_2)
-    log.info("SNAP output DebugString:\n" + result.toDebugString)
+    if (debug) {
+      log.info("SNAP output DebugString:\n" + result.toDebugString)
+    }
     log.info("produced " + result.count + " reads")
     result
   }

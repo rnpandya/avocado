@@ -57,7 +57,7 @@
       <organizationUrl>http://www.cs.berkeley.edu/</organizationUrl>
     </developer>
   </developers>
-  
+
   <issueManagement>
     <system>github</system>
     <url>https://github.com/bigdatagenomics/avocado/issues</url>
@@ -224,6 +224,10 @@
           </exclusion>
           <exclusion>
             <groupId>org.sonatype.sisu.inject</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>javax.servlet</groupId>
             <artifactId>*</artifactId>
           </exclusion>
         </exclusions>

@@ -49,16 +49,19 @@ private[calls] object ReadCallExternal extends VariantCallCompanion {
     // get command and partition count
     val cmd = config.getString("command")
     val partitions = config.getInt("partitions")
+    val debug = config.getBoolean("debug", false)
 
     new ReadCallExternal(stats.contigLengths,
       partitions,
-      cmd)
+      cmd,
+      debug)
   }
 }
 
 private[reads] class ReadCallExternal(contigLengths: Map[String, Long],
                                       numPart: Int,
-                                      cmd: String) extends VariantCall {
+                                      cmd: String,
+                                      debug: Boolean) extends VariantCall {
 
   val companion = ReadCallExternal
 
@@ -184,7 +187,9 @@ private[reads] class ReadCallExternal(contigLengths: Map[String, Long],
 
   def call(rdd: RDD[ADAMRecord]): RDD[ADAMVariantContext] = {
 
-    log.info("variant input DebugString:\n" + rdd.toDebugString)
+    if (debug) {
+      log.info("variant input DebugString:\n" + rdd.toDebugString)
+    }
 
     // get initial partition count
     val partitions = rdd.partitions.length
@@ -195,14 +200,17 @@ private[reads] class ReadCallExternal(contigLengths: Map[String, Long],
     // broadcast header
     val hdrBcast = reads.context.broadcast(SAMFileHeaderWritable(header))
 
-    log.info("have " + -1 /*reads.count*/ + " reads")
+    if (debug) {
+      log.info("have " + reads.count + " reads")
+    }
 
     // key reads by position and repartition
     val readsByPosition = reads.keyBy(r => ReferencePosition(r.get.getReferenceName.toString, r.get.getAlignmentStart))
       .partitionBy(new GenomicRegionPartitioner(numPart, contigLengths))
 
-    log.info("have " + -1 /*readsByPosition.count*/ + " reads after partitioning")
-    //readsByPosition.foreachPartition(i => log.info("have " + i.length + " reads per partition"))
+    if (debug) {
+      log.info("have " + readsByPosition.count + " reads after partitioning")
+    }
 
     // map partitions to external program
     val variants = readsByPosition.mapPartitions(r => callVariants(r, hdrBcast.value))
@@ -210,7 +218,9 @@ private[reads] class ReadCallExternal(contigLengths: Map[String, Long],
     // convert variants to adam format, coalesce, and return
     val converter = new VariantContextConverter()
     val result = variants.flatMap(vc => converter.convert(vc.get)).coalesce(partitions, true)
-    log.info("variant output DebugString:\n" + result.toDebugString)
+    if (debug) {
+      log.info("variant output DebugString:\n" + result.toDebugString)
+    }
     result
   }
 
