@@ -15,21 +15,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.bdgenomics.avocado.preprocessing
+package org.bdgenomics.avocado.discovery
 
-import org.apache.commons.configuration.SubnodeConfiguration
+import org.apache.commons.configuration.{ HierarchicalConfiguration, SubnodeConfiguration }
 import org.apache.spark.rdd.RDD
+import org.bdgenomics.avocado.models.{ Observation, ReadObservation }
+import org.bdgenomics.avocado.stats.AvocadoConfigAndStats
 import org.bdgenomics.formats.avro.AlignmentRecord
-import org.bdgenomics.adam.rdd.ADAMContext._
-import org.bdgenomics.adam.rdd.read.ADAMAlignmentRecordContext._
 
-object RealignIndels extends PreprocessingStage {
+object ExternalExplorer extends ExplorerCompanion {
 
-  val stageName = "realignIndels"
+  val explorerName: String = "ExternalExplorer"
 
-  def apply(rdd: RDD[AlignmentRecord], config: SubnodeConfiguration): RDD[AlignmentRecord] = {
-    // no configuration needed, simply call indel realigner
-    rdd.adamRealignIndels()
+  protected def apply(stats: AvocadoConfigAndStats,
+                      config: SubnodeConfiguration): Explorer = {
+    new ExternalExplorer()
   }
+}
 
+class ExternalExplorer extends Explorer {
+
+  val companion: ExplorerCompanion = ExternalExplorer
+
+  def discover(reads: RDD[AlignmentRecord]): RDD[Observation] = {
+    reads.map(r => new ReadObservation(r).asInstanceOf[Observation])
+  }
 }

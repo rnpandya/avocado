@@ -15,21 +15,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.bdgenomics.avocado.preprocessing
+package htsjdk.samtools
 
-import org.apache.commons.configuration.SubnodeConfiguration
-import org.apache.spark.rdd.RDD
-import org.bdgenomics.formats.avro.AlignmentRecord
-import org.bdgenomics.adam.rdd.ADAMContext._
-import org.bdgenomics.adam.rdd.read.ADAMAlignmentRecordContext._
+import java.io.OutputStream
+import org.seqdoop.hadoop_bam.SAMRecordWritable
 
-object RealignIndels extends PreprocessingStage {
+// create writer - this is a code stench; 
+// samtools suggests to pass a null file if using a stream
+// need to wrap a few private methods
+class BAMStreamWriter(stream: OutputStream) extends BAMFileWriter(stream, null) {
 
-  val stageName = "realignIndels"
-
-  def apply(rdd: RDD[AlignmentRecord], config: SubnodeConfiguration): RDD[AlignmentRecord] = {
-    // no configuration needed, simply call indel realigner
-    rdd.adamRealignIndels()
+  def writeHadoopAlignment(record: SAMRecordWritable) {
+    writeAlignment(record.get)
   }
-
 }

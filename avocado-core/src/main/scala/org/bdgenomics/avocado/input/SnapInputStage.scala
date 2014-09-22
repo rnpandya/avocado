@@ -26,13 +26,14 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.{ Logging, SparkContext }
 import org.apache.spark.rdd.RDD
-import org.bdgenomics.formats.avro.{ ADAMRecord, ADAMNucleotideContigFragment }
+import org.bdgenomics.formats.avro.{ AlignmentRecord, NucleotideContigFragment }
 import org.bdgenomics.adam.converters.SAMRecordConverter
 import org.bdgenomics.adam.io.InterleavedFastqInputFormat
 import org.bdgenomics.adam.rdd.ADAMContext._
+import org.bdgenomics.adam.rdd.contig.ADAMNucleotideContigFragmentContext._
 import org.bdgenomics.adam.models.{ RecordGroup, RecordGroupDictionary, SequenceDictionary }
 import org.bdgenomics.avocado.stats.AvocadoConfigAndStats
-import net.sf.samtools._
+import htsjdk.samtools._
 import scala.collection.JavaConversions._
 
 private[input] object SnapInputStage extends InputStage with Logging {
@@ -50,7 +51,7 @@ private[input] object SnapInputStage extends InputStage with Logging {
   def apply(sc: SparkContext,
             inputPath: String,
             config: SubnodeConfiguration,
-            reference: RDD[ADAMNucleotideContigFragment]): RDD[ADAMRecord] = {
+            reference: RDD[NucleotideContigFragment]): RDD[AlignmentRecord] = {
 
     // build list of options
     // -M is included by default because ADAM assumes alignment match in cigar
@@ -308,7 +309,7 @@ private[input] class SnapRunner(cmd: List[String], rg: String)
    * @param dict Sequence dictionary describing reference contigs.
    * @return An iterator containing aligned reads.
    */
-  def mapReads(idx: Int, fastqStrings: Iterator[Text], dict: SequenceDictionary): Iterator[ADAMRecord] = {
+  def mapReads(idx: Int, fastqStrings: Iterator[Text], dict: SequenceDictionary): Iterator[AlignmentRecord] = {
 
     // build snap process
     val pb = new ProcessBuilder(cmd)

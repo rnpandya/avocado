@@ -19,14 +19,15 @@ package org.bdgenomics.avocado.preprocessing
 
 import org.apache.commons.configuration.SubnodeConfiguration
 import org.apache.spark.rdd.RDD
-import org.bdgenomics.formats.avro.ADAMRecord
 import org.bdgenomics.adam.rdd.ADAMContext._
+import org.bdgenomics.adam.rdd.read.ADAMAlignmentRecordContext._
+import org.bdgenomics.formats.avro.AlignmentRecord
 
 object MarkDuplicates extends PreprocessingStage {
 
   val stageName = "markDuplicates"
 
-  def apply(rdd: RDD[ADAMRecord], config: SubnodeConfiguration): RDD[ADAMRecord] = {
+  def apply(rdd: RDD[AlignmentRecord], config: SubnodeConfiguration): RDD[AlignmentRecord] = {
     // no configuration needed, simply call mark duplicates
     rdd.adamMarkDuplicates()
   }

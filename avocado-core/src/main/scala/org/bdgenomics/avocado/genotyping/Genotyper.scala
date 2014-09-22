@@ -15,36 +15,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.bdgenomics.avocado.postprocessing
+package org.bdgenomics.avocado.genotyping
 
-import org.apache.commons.configuration.HierarchicalConfiguration
+import org.apache.commons.configuration.{ HierarchicalConfiguration, SubnodeConfiguration }
 import org.apache.spark.rdd.RDD
 import org.bdgenomics.adam.models.VariantContext
+import org.bdgenomics.avocado.models.Observation
 import org.bdgenomics.avocado.stats.AvocadoConfigAndStats
 
-object Postprocessor {
+trait GenotyperCompanion {
 
-  private val stages = List[PostprocessingStage](FilterDepth)
+  val genotyperName: String
 
-  assert(stages.map(_.stageName).length == stages.map(_.stageName).distinct.length,
-    "Postprocessing stages have duplicated names.")
+  protected def apply(stats: AvocadoConfigAndStats,
+                      config: SubnodeConfiguration): Genotyper
 
-  def apply(rdd: RDD[VariantContext],
-            stageName: String,
-            stageAlgorithm: String,
-            stats: AvocadoConfigAndStats,
-            config: HierarchicalConfiguration): RDD[VariantContext] = {
+  final def apply(stats: AvocadoConfigAndStats,
+                  globalConfig: HierarchicalConfiguration,
+                  genotyperSetName: String): Genotyper = {
+    val config: SubnodeConfiguration = globalConfig.configurationAt(genotyperSetName)
 
-    val stage = stages.find(_.stageName == stageAlgorithm)
-
-    stage match {
-      case Some(s) => {
-        val c = config.configurationAt(stageName)
-
-        s.apply(rdd, stats, c)
-      }
-      case None => throw new IllegalArgumentException("Postprocessing stage " + stageAlgorithm + "does not exist.")
-    }
+    apply(stats, config)
   }
+}
 
+trait Genotyper extends Serializable {
+
+  val companion: GenotyperCompanion
+
+  def genotype(observations: RDD[Observation]): RDD[VariantContext]
 }

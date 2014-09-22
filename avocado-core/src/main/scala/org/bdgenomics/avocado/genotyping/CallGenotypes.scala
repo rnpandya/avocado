@@ -15,33 +15,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.bdgenomics.avocado.preprocessing
+package org.bdgenomics.avocado.genotyping
 
-import org.bdgenomics.formats.avro.AlignmentRecord
 import org.apache.commons.configuration.HierarchicalConfiguration
 import org.apache.spark.rdd.RDD
+import org.bdgenomics.adam.models.VariantContext
+import org.bdgenomics.avocado.models.Observation
+import org.bdgenomics.avocado.stats.AvocadoConfigAndStats
 
-object Preprocessor {
+object CallGenotypes {
 
-  private val stages = List(MarkDuplicates,
-    RecalibrateBaseQualities,
-    SortReads,
-    CoalesceReads,
-    RealignIndels)
+  val genotypers: Seq[GenotyperCompanion] = Seq(BiallelicGenotyper,
+    ExternalGenotyper)
 
-  def apply(rdd: RDD[AlignmentRecord],
-            stageName: String,
-            stageAlgorithm: String,
-            config: HierarchicalConfiguration): RDD[AlignmentRecord] = {
+  def apply(genotyperAlgorithm: String,
+            genotyperName: String,
+            rdd: RDD[Observation],
+            stats: AvocadoConfigAndStats,
+            config: HierarchicalConfiguration): RDD[VariantContext] = {
 
-    // get configuration for this stage
-    val stageConfig = config.configurationAt(stageName)
-
-    // find and run stage
-    val stage = stages.find(_.stageName == stageAlgorithm)
-
-    assert(stage.isDefined, "Could not find stage with name: " + stageName)
-    stage.get.apply(rdd, stageConfig)
+    genotypers.find(_.genotyperName == genotyperAlgorithm)
+      .fold(throw new IllegalArgumentException("Couldn't find genotyping algorithm: " +
+        genotyperAlgorithm))(_.apply(stats,
+        config,
+        genotyperName))
+      .genotype(rdd)
   }
-
 }

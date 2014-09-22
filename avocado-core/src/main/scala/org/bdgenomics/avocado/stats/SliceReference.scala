@@ -15,21 +15,32 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.bdgenomics.avocado.preprocessing
+package org.bdgenomics.avocado.stats
 
-import org.apache.commons.configuration.SubnodeConfiguration
 import org.apache.spark.rdd.RDD
-import org.bdgenomics.formats.avro.AlignmentRecord
-import org.bdgenomics.adam.rdd.ADAMContext._
-import org.bdgenomics.adam.rdd.read.ADAMAlignmentRecordContext._
+import org.bdgenomics.adam.models.ReferencePosition
+import org.bdgenomics.avocado.models.Observation
+import org.bdgenomics.formats.avro.NucleotideContigFragment
 
-object RealignIndels extends PreprocessingStage {
+private[stats] object SliceReference extends Serializable {
 
-  val stageName = "realignIndels"
+  def apply(rdd: RDD[NucleotideContigFragment]): RDD[Observation] = {
+    rdd.flatMap(ctg => {
+      // get contig fields
+      val reference = ctg.getContig.getContigName.toString
+      var pos = ctg.getFragmentStartPosition
+      val sequence = ctg.getFragmentSequence.toString.toArray
 
-  def apply(rdd: RDD[AlignmentRecord], config: SubnodeConfiguration): RDD[AlignmentRecord] = {
-    // no configuration needed, simply call indel realigner
-    rdd.adamRealignIndels()
+      // map over sequence and emit observations
+      sequence.map(base => {
+        val observation = new Observation(ReferencePosition(reference, pos),
+          base.toString)
+
+        // increment site
+        pos += 1
+
+        observation
+      })
+    })
   }
-
 }

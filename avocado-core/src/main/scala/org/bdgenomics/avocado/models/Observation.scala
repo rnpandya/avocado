@@ -15,21 +15,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.bdgenomics.avocado.preprocessing
+package org.bdgenomics.avocado.models
 
-import org.apache.commons.configuration.SubnodeConfiguration
-import org.apache.spark.rdd.RDD
-import org.bdgenomics.formats.avro.AlignmentRecord
-import org.bdgenomics.adam.rdd.ADAMContext._
-import org.bdgenomics.adam.rdd.read.ADAMAlignmentRecordContext._
+import org.bdgenomics.adam.models.ReferencePosition
 
-object RealignIndels extends PreprocessingStage {
-
-  val stageName = "realignIndels"
-
-  def apply(rdd: RDD[AlignmentRecord], config: SubnodeConfiguration): RDD[AlignmentRecord] = {
-    // no configuration needed, simply call indel realigner
-    rdd.adamRealignIndels()
-  }
-
+class Observation(val pos: ReferencePosition,
+                  val allele: String) extends Serializable {
 }
+

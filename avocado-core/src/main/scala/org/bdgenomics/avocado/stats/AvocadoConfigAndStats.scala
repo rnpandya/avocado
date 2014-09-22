@@ -19,15 +19,15 @@ package org.bdgenomics.avocado.stats
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.bdgenomics.formats.avro.{ ADAMRecord, ADAMNucleotideContigFragment }
 import org.bdgenomics.adam.models.SequenceDictionary
 import org.bdgenomics.adam.rdd.ADAMContext._
-import org.bdgenomics.adam.rdd.ADAMRDDFunctions
+import org.bdgenomics.adam.rdd.contig.ADAMNucleotideContigFragmentContext._
+import org.bdgenomics.formats.avro.{ AlignmentRecord, NucleotideContigFragment }
 
 class AvocadoConfigAndStats(val sc: SparkContext,
                             val debug: Boolean,
-                            inputDataset: RDD[ADAMRecord],
-                            reference: RDD[ADAMNucleotideContigFragment]) {
+                            inputDataset: RDD[AlignmentRecord],
+                            reference: RDD[NucleotideContigFragment]) {
 
   lazy val coverage = ScoreCoverage(inputDataset)
 
@@ -41,4 +41,5 @@ class AvocadoConfigAndStats(val sc: SparkContext,
     .distinct()
     .collect()
 
+  lazy val referenceObservations = SliceReference(reference)
 }

@@ -17,9 +17,12 @@
  */
 package org.bdgenomics.avocado.input
 
-import org.bdgenomics.formats.avro.{ ADAMRecord, ADAMNucleotideContigFragment }
+import org.bdgenomics.formats.avro.{ AlignmentRecord, NucleotideContigFragment }
 import org.bdgenomics.adam.predicates.UniqueMappedReadPredicate
 import org.bdgenomics.adam.rdd.ADAMContext._
+import org.bdgenomics.adam.rdd.ADAMContext
+import org.bdgenomics.adam.rdd.contig.ADAMNucleotideContigFragmentContext._
+import org.bdgenomics.adam.rdd.read.ADAMAlignmentRecordContext._
 import org.apache.commons.configuration.SubnodeConfiguration
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
@@ -39,11 +42,11 @@ private[input] object AlignedReadsInputStage extends InputStage {
   def apply(sc: SparkContext,
             inputPath: String,
             config: SubnodeConfiguration,
-            reference: RDD[ADAMNucleotideContigFragment]): RDD[ADAMRecord] = {
+            reference: RDD[NucleotideContigFragment]): RDD[AlignmentRecord] = {
 
     println("Loading reads in from " + inputPath)
 
-    sc.adamLoad(inputPath, Some(classOf[UniqueMappedReadPredicate]))
+    new ADAMContext(sc).adamLoad(inputPath, Some(classOf[UniqueMappedReadPredicate]))
   }
 
 }
