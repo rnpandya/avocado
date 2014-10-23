@@ -118,7 +118,7 @@ class BiallelicGenotyper(ploidy: Int = 2,
                               idx: Int = 1,
                               maxIdx: Int = 0): Int = {
     // are we at the end of the array? if so, return.
-    if (idx > array.length) {
+    if (idx >= array.length) {
       maxIdx
     } else {
       // do we have a new max? if so, update the current max index.
@@ -216,7 +216,7 @@ class BiallelicGenotyper(ploidy: Int = 2,
 
     // find most frequently observed non-ref allele
     val nonRefAlleles = alleleObservations.filter(_.allele != reference)
-    val allele = if (nonRefAlleles.size >= 0) {
+    val allele = if (nonRefAlleles.size > 0) {
       nonRefAlleles.groupBy(_.allele)
         .maxBy(kv => kv._2.size)
         ._1
