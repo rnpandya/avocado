@@ -19,7 +19,7 @@ package org.bdgenomics.avocado.postprocessing
 
 import org.apache.commons.configuration.SubnodeConfiguration
 import org.apache.spark.rdd.RDD
-import org.bdgenomics.formats.avro.Genotype
+import org.bdgenomics.formats.avro.{ Genotype, VariantCallingAnnotations }
 import org.bdgenomics.adam.models.VariantContext
 import org.bdgenomics.avocado.stats.AvocadoConfigAndStats
 
@@ -58,24 +58,14 @@ private[postprocessing] object FilterDepth extends PostprocessingStage {
   }
 }
 
-private[postprocessing] class DepthFilter(depth: Int) extends GenotypeFilter {
+private[postprocessing] class DepthFilter(depth: Int) extends GenotypeAttributeFilter[Int] {
 
-  /**
-   * Filters genotypes that have low coverage.
-   *
-   * @param genotypes List of genotypes called at this site.
-   * @return List of genotypes after filtering.
-   */
-  def filterGenotypes(genotypes: Seq[Genotype]): Seq[Genotype] = {
-    val keyed = genotypes.map(g => (Option(g.getReadDepth), g))
+  val filterName = "DEPTH>=%d".format(depth)
 
-    val genotypesNoStats: Seq[Genotype] = keyed.filter(t => t._1.isEmpty)
-      .map(t => t._2)
-    val genotypesWithStats: Seq[Genotype] = keyed.filter(t => t._1.isDefined)
-      .filter(kv => kv._1.get >= depth)
-      .map(kv => kv._2)
-
-    genotypesNoStats ++ genotypesWithStats
+  def keyFn(g: Genotype): Option[Int] = {
+    val i: Integer = g.getReadDepth
+    Option(i).map(_.toInt)
   }
 
+  def filterFn(genotypeDepth: Int): Boolean = genotypeDepth >= depth
 }

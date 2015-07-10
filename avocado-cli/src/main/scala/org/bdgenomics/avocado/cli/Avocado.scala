@@ -23,22 +23,9 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.rdd.RDD
 import org.apache.spark.{ SparkContext, Logging }
 import org.kohsuke.args4j.{ Option => option, Argument }
-import org.bdgenomics.formats.avro.{
-  Variant,
-  AlignmentRecord,
-  NucleotideContigFragment,
-  Genotype
-}
-import org.bdgenomics.adam.cli.{
-  ADAMSparkCommand,
-  ADAMCommandCompanion,
-  ParquetArgs,
-  Args4j,
-  Args4jBase
-}
 import org.bdgenomics.adam.models.{ VariantContext, ReferenceRegion }
 import org.bdgenomics.adam.rdd.ADAMContext._
-import org.bdgenomics.adam.rdd.contig.NucleotideContigFragmentContext
+import org.bdgenomics.avocado.Timers._
 import org.bdgenomics.avocado.discovery.Explore
 import org.bdgenomics.avocado.genotyping.CallGenotypes
 import org.bdgenomics.avocado.input.Input
@@ -46,8 +33,22 @@ import org.bdgenomics.avocado.models.Observation
 import org.bdgenomics.avocado.preprocessing.Preprocessor
 import org.bdgenomics.avocado.postprocessing.Postprocessor
 import org.bdgenomics.avocado.stats.AvocadoConfigAndStats
+import org.bdgenomics.formats.avro.{
+  Variant,
+  AlignmentRecord,
+  NucleotideContigFragment,
+  Genotype
+}
+import org.bdgenomics.utils.cli.{
+  BDGSparkCommand,
+  BDGCommandCompanion,
+  ParquetArgs,
+  Args4j,
+  Args4jBase
+}
+import org.bdgenomics.utils.instrumentation._
 
-object Avocado extends ADAMCommandCompanion {
+object Avocado extends BDGCommandCompanion {
 
   val commandName = "Avocado"
   val commandDescription = "Call variants using avocado and the ADAM preprocessing pipeline."
@@ -77,9 +78,9 @@ class AvocadoArgs extends Args4jBase with ParquetArgs {
   var fragmentLength: Long = 10000L
 }
 
-class Avocado(protected val args: AvocadoArgs) extends ADAMSparkCommand[AvocadoArgs] with Logging {
+class Avocado(protected val args: AvocadoArgs) extends BDGSparkCommand[AvocadoArgs] with Logging {
 
-  // companion object to this class - needed for ADAMCommand framework
+  // companion object to this class - needed for BDGCommand framework
   val companion = Avocado
 
   // get config
@@ -116,7 +117,7 @@ class Avocado(protected val args: AvocadoArgs) extends ADAMSparkCommand[AvocadoA
    * @param reads RDD of reads to process.
    * @return RDD containing reads that have been sorted and deduped.
    */
-  def preProcessReads(reads: RDD[AlignmentRecord]): RDD[AlignmentRecord] = {
+  def preProcessReads(reads: RDD[AlignmentRecord]): RDD[AlignmentRecord] = PreprocessReads.time {
     var processedReads = reads //.cache
 
     if (debug) {
@@ -144,7 +145,7 @@ class Avocado(protected val args: AvocadoArgs) extends ADAMSparkCommand[AvocadoA
    * @param stats
    * @return Joined output of variant calling algorithms.
    */
-  def callVariants(reads: RDD[AlignmentRecord], stats: AvocadoConfigAndStats): RDD[VariantContext] = {
+  def callVariants(reads: RDD[AlignmentRecord], stats: AvocadoConfigAndStats): RDD[VariantContext] = CallVariants.time {
     val discoveries: RDD[Observation] = Explore(explorerAlgorithm,
       explorerName,
       reads,
@@ -165,8 +166,8 @@ class Avocado(protected val args: AvocadoArgs) extends ADAMSparkCommand[AvocadoA
    * @param variants RDD of variants to process.
    * @return Post-processed variants.
    */
-  def postProcessVariants(variants: RDD[VariantContext], stats: AvocadoConfigAndStats): RDD[VariantContext] = {
-    var rdd = variants //.cache()
+  def postProcessVariants(variants: RDD[VariantContext], stats: AvocadoConfigAndStats): RDD[VariantContext] = PostprocessVariants.time {
+    var rdd = variants
 
     // loop over post processing steps
     postprocessorsZipped.foreach(p => {
@@ -185,17 +186,20 @@ class Avocado(protected val args: AvocadoArgs) extends ADAMSparkCommand[AvocadoA
    * @param sc SparkContext for RDDs.
    * @param job Hadoop Job container for file I/O.
    */
-  def run(sc: SparkContext, job: Job) {
+  def run(sc: SparkContext) {
 
     log.info("Starting avocado...")
 
     // load in reference from ADAM file
-    val reference: RDD[NucleotideContigFragment] = new NucleotideContigFragmentContext(sc)
-      .adamSequenceLoad(args.referenceInput, args.fragmentLength)
+    val reference: RDD[NucleotideContigFragment] = LoadContigs.time {
+      sc.loadSequence(args.referenceInput, fragmentLength = args.fragmentLength)
+    }
 
     log.info("Loading reads in from " + args.readInput)
     // load in reads from ADAM file
-    val reads: RDD[AlignmentRecord] = Input(sc, args.readInput, reference, config)
+    val reads: RDD[AlignmentRecord] = LoadReads.time {
+      Input(sc, args.readInput, reference, config)
+    }
 
     // create stats/config item
     val stats = new AvocadoConfigAndStats(sc, args.debug, reads, reference)
@@ -214,10 +218,12 @@ class Avocado(protected val args: AvocadoArgs) extends ADAMSparkCommand[AvocadoA
 
     // save variants to output file
     log.info("Writing calls to disk.")
-    processedGenotypes.adamParquetSave(args.variantOutput,
-      args.blockSize,
-      args.pageSize,
-      args.compressionCodec,
-      args.disableDictionaryEncoding)
+    SaveVariants.time {
+      processedGenotypes.adamParquetSave(args.variantOutput,
+        args.blockSize,
+        args.pageSize,
+        args.compressionCodec,
+        args.disableDictionaryEncoding)
+    }
   }
 }

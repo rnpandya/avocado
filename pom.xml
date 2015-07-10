@@ -15,14 +15,15 @@
   <name>avocado: A Variant Caller, Distributed</name>
   
   <properties>
-    <adam.version>0.14.1-SNAPSHOT</adam.version>
+    <adam.version>0.17.1-SNAPSHOT</adam.version>
     <avro.version>1.7.6</avro.version>
     <java.version>1.7</java.version>
     <scala.version>2.10.3</scala.version>
     <scala.version.prefix>2.10</scala.version.prefix>
-    <spark.version>1.1.0</spark.version>
+    <spark.version>1.2.0</spark.version>
     <!-- Edit the following line to configure the Hadoop (HDFS) version. -->
     <hadoop.version>2.2.0</hadoop.version>
+    <utils.version>0.2.2</utils.version>
   </properties>
   
   <modules>
@@ -133,6 +134,11 @@
           <artifactId>scalariform-maven-plugin</artifactId>
           <version>0.1.4</version>
         </plugin>
+        <plugin>
+          <artifactId>exec-maven-plugin</artifactId>
+          <groupId>org.codehaus.mojo</groupId>
+          <version>1.3.2</version>
+        </plugin>
       </plugins>
     </pluginManagement>
     <plugins>
@@ -224,15 +230,37 @@
   <dependencyManagement>
     <dependencies>
       <dependency>
+        <groupId>org.bdgenomics.utils</groupId>
+        <artifactId>utils-cli_2.10</artifactId>
+        <version>${utils.version}</version>
+      </dependency>
+      <dependency>
         <groupId>org.bdgenomics.avocado</groupId>
         <artifactId>avocado-core</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
+        <groupId>org.bdgenomics.utils</groupId>
+        <artifactId>utils-misc_2.10</artifactId>
+        <version>${utils.version}</version>
+        <type>test-jar</type>
+        <scope>test</scope>        
+      </dependency>
+      <dependency>
+        <groupId>org.bdgenomics.utils</groupId>
+        <artifactId>utils-metrics_2.10</artifactId>
+        <version>${utils.version}</version>
+      </dependency>
+      <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-client</artifactId>
         <version>${hadoop.version}</version>
+        <scope>provided</scope>
         <exclusions>
+          <exclusion>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+          </exclusion>
           <exclusion>
             <groupId>asm</groupId>
             <artifactId>asm</artifactId>
@@ -257,19 +285,12 @@
       </dependency>
       <dependency>
         <groupId>org.bdgenomics.adam</groupId>
-        <artifactId>adam-core</artifactId>
+        <artifactId>adam-core_2.10</artifactId>
         <version>${adam.version}</version>
       </dependency>
       <dependency>
         <groupId>org.bdgenomics.adam</groupId>
-        <artifactId>adam-core</artifactId>
-        <version>${adam.version}</version>
-        <type>test-jar</type>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.bdgenomics.adam</groupId>
-        <artifactId>adam-cli</artifactId>
+        <artifactId>adam-cli_2.10</artifactId>
         <version>${adam.version}</version>
       </dependency>
       <dependency>
@@ -292,12 +313,96 @@
         <groupId>org.apache.spark</groupId>
         <artifactId>spark-core_${scala.version.prefix}</artifactId>
         <version>${spark.version}</version>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro</artifactId>
         <version>${avro.version}</version>
       </dependency>
+      <dependency>
+        <groupId>org.scalanlp</groupId>
+        <artifactId>breeze_2.10</artifactId>
+        <version>0.10</version>
+        <scope>test</scope>
+      </dependency>
     </dependencies>
   </dependencyManagement>
+
+  <profiles>
+    <profile>
+      <id>distribution</id>
+      <modules>
+        <module>avocado-core</module>
+        <module>avocado-cli</module>
+        <!-- distribution should be last -->
+        <module>avocado-distribution</module>
+      </modules>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-source-plugin</artifactId>
+            <version>2.2.1</version>
+            <executions>
+              <execution>
+                <id>attach-sources</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>jar-no-fork</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <version>2.9.1</version>
+            <executions>
+              <execution>
+                <id>attach-javadocs</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>net.alchim31.maven</groupId>
+            <artifactId>scala-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>scala-compile-first</id>
+                <phase>process-resources</phase>
+                <goals>
+                  <goal>compile</goal>
+                </goals>
+                <configuration>
+                  <args>
+                    <arg>-g:vars</arg>
+                  </args>
+                </configuration>
+              </execution>
+              <execution>
+                <id>scala-test-compile-first</id>
+                <phase>process-test-resources</phase>
+                <goals>
+                  <goal>testCompile</goal>
+                </goals>
+              </execution>
+              <execution>
+                <id>attach-scaladocs</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>doc-jar</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+
 </project>

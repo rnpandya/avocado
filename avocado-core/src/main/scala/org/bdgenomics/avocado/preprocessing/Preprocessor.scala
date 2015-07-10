@@ -27,7 +27,10 @@ object Preprocessor {
     RecalibrateBaseQualities,
     SortReads,
     CoalesceReads,
-    RealignIndels)
+    RealignIndels,
+    BaseQualityFilter,
+    ClippingFilter,
+    DuplicateFilter)
 
   def apply(rdd: RDD[AlignmentRecord],
             stageName: String,
